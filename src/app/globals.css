@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+/* PS44 design tokens — sourced from DESIGN.md (Coinbase-style system) */
+@theme {
+  --color-primary: #0052ff;
+  --color-primary-active: #003ecc;
+  --color-primary-disabled: #a8b8cc;
+
+  --color-ink: #0a0b0d;
+  --color-body: #5b616e;
+  --color-muted: #7c828a;
+  --color-muted-soft: #a8acb3;
+
+  --color-hairline: #dee1e6;
+  --color-hairline-soft: #eef0f3;
+
+  --color-canvas: #ffffff;
+  --color-surface-soft: #f7f7f7;
+  --color-surface-strong: #eef0f3;
+  --color-surface-dark: #0a0b0d;
+  --color-surface-dark-elevated: #16181c;
+
+  --color-on-primary: #ffffff;
+  --color-on-dark: #ffffff;
+  --color-on-dark-soft: #a8acb3;
+
+  --color-semantic-up: #05b169;
+  --color-semantic-down: #cf202f;
+  --color-accent-yellow: #f4b000;
+
+  --font-display: var(--font-inter), -apple-system, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-sans: var(--font-inter), -apple-system, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", monospace;
+
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-pill: 100px;
+
+  --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+/* Display headlines: weight 400, negative tracking (DESIGN.md) */
+.text-display {
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+/* Numbers render in mono (number-display token) */
+.tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-primary) 20%, white);
+}

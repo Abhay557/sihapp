@@ -1,0 +1,470 @@
+// PS44 — Academia–Industry Collaboration Portal
+// College module: student records, skill intelligence, curriculum mapping,
+// training, projects, simulations, courses, internships, placements.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────── Core users ─────────────────────────
+
+enum Role {
+  STUDENT
+  TEACHER
+}
+
+enum ProfileStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  student Student?
+  teacher Teacher?
+
+  sessions Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Teacher {
+  id           String        @id @default(cuid())
+  userId       String        @unique
+  department   String        @default("General")
+  designation  String        @default("Faculty")
+  createdAt    DateTime      @default(now())
+
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  approvals     ProfileApproval[]
+  mentoredProjects Project[] @relation("ProjectMentor")
+
+  @@map("teachers")
+}
+
+model Student {
+  id            String        @id @default(cuid())
+  userId        String        @unique
+  rollNumber    String        @unique
+  department    String
+  batch         String
+  program       String        @default("B.Tech")
+  cgpa          Float         @default(0)
+  status        ProfileStatus @default(PENDING)
+  placementReady Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skills          StudentSkill[]
+  applications    Application[]
+  enrollments     Enrollment[]
+  certificates    Certificate[]
+  projectMembers  ProjectMember[]
+  simulationRuns  SimulationRun[]
+  assessments     AssessmentAttempt[]
+  resumeAnalyses  ResumeAnalysis[]
+  approvals       ProfileApproval[]
+
+  @@map("students")
+}
+
+// approval workflow: teacher approves / rejects student profiles
+model ProfileApproval {
+  id         String   @id @default(cuid())
+  studentId  String
+  teacherId  String
+  action     String // APPROVED | REJECTED
+  note       String?
+  createdAt  DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+}
+
+// ───────────────────────── Skills ontology ─────────────────────────
+
+model Skill {
+  id         String  @id @default(cuid())
+  name       String  @unique
+  category   String  @default("General")
+
+  studentSkills StudentSkill[]
+  jobSkills     JobSkill[]
+  courseSkills  CourseSkill[]
+  primaryCourses Course[] @relation("CoursePrimarySkill")
+  curriculumMaps CurriculumMapping[]
+  badges        Badge[]
+
+  @@map("skills")
+}
+
+model StudentSkill {
+  studentId String
+  skillId   String
+  level     Int     // 0–100
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  skill   Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([studentId, skillId])
+}
+
+// ───────────────────────── Jobs / Internships ─────────────────────────
+
+enum JobType {
+  FULL_TIME
+  INTERNSHIP
+}
+
+enum JobSource {
+  MANUAL
+  SERPAPI_GOOGLE_JOBS
+  FANTASTIC_JOBS
+  UPWORK
+}
+
+model Job {
+  id          String    @id @default(cuid())
+  title       String
+  company     String
+  location    String    @default("Remote")
+  type        JobType
+  description String
+  stipend     String?
+  deadline    DateTime?
+  source      JobSource @default(MANUAL)
+  externalId  String?
+  applyUrl    String?
+  postedById  String?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  skills      JobSkill[]
+  applications Application[]
+
+  @@index([type])
+  @@map("jobs")
+}
+
+model JobSkill {
+  jobId   String
+  skillId String
+  required Boolean @default(true)
+
+  job   Job   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([jobId, skillId])
+}
+
+enum ApplicationStatus {
+  APPLIED
+  SHORTLISTED
+  INTERVIEW
+  OFFER
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+model Application {
+  id        String   @id @default(cuid())
+  studentId String
+  jobId     String
+  status    ApplicationStatus @default(APPLIED)
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  job     Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, jobId])
+  @@index([studentId])
+  @@map("applications")
+}
+
+// ───────────────────────── Projects portal ─────────────────────────
+
+enum ProjectStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+}
+
+model Project {
+  id           String        @id @default(cuid())
+  title        String
+  description  String
+  domain       String        @default("Software")
+  difficulty   String        @default("Beginner")
+  status       ProjectStatus @default(OPEN)
+  mentorId     String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  mentor     Teacher?        @relation("ProjectMentor", fields: [mentorId], references: [id])
+  members    ProjectMember[]
+  milestones ProjectMilestone[]
+
+  @@map("projects")
+}
+
+model ProjectMember {
+  projectId  String
+  studentId  String
+  role       String  @default("Member")
+  joinedAt   DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, studentId])
+}
+
+model ProjectMilestone {
+  id         String   @id @default(cuid())
+  projectId   String
+  title       String
+  done        Boolean  @default(false)
+  dueDate     DateTime?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("project_milestones")
+}
+
+// ───────────────────────── Virtual job simulations ─────────────────────────
+
+model Simulation {
+  id          String @id @default(cuid())
+  title       String
+  company     String
+  domain      String @default("Software")
+  difficulty  String @default("Beginner")
+  description String
+  tasks       String // JSON array of task strings
+  durationMins Int   @default(60)
+  createdAt   DateTime @default(now())
+
+  runs SimulationRun[]
+
+  @@map("simulations")
+}
+
+model SimulationRun {
+  id           String   @id @default(cuid())
+  studentId    String
+  simulationId String
+  score        Int      @default(0)
+  completed    Boolean  @default(false)
+  startedAt    DateTime @default(now())
+  completedAt  DateTime?
+
+  student    Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@map("simulation_runs")
+}
+
+// ───────────────────────── Courses / skills portal ─────────────────────────
+
+enum CourseLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+model Course {
+  id          String      @id @default(cuid())
+  title       String
+  provider    String      @default("PS44 Academy")
+  level       CourseLevel @default(BEGINNER)
+  description String
+  durationHrs Int         @default(10)
+  skillId     String?
+  createdAt   DateTime    @default(now())
+
+  skill        Skill?       @relation("CoursePrimarySkill", fields: [skillId], references: [id])
+  skills       CourseSkill[]
+  enrollments  Enrollment[]
+  assessment   Assessment?
+
+  @@map("courses")
+}
+
+model CourseSkill {
+  courseId String
+  skillId  String
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  skill  Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([courseId, skillId])
+}
+
+enum EnrollmentStatus {
+  ENROLLED
+  IN_PROGRESS
+  COMPLETED
+}
+
+model Enrollment {
+  id         String           @id @default(cuid())
+  studentId  String
+  courseId   String
+  status     EnrollmentStatus @default(ENROLLED)
+  progress   Int              @default(0) // 0–100
+  startedAt  DateTime         @default(now())
+  completedAt DateTime?
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  course  Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, courseId])
+  @@index([studentId])
+  @@map("enrollments")
+}
+
+// ───────────────────────── Assessments & badges ─────────────────────────
+
+model Assessment {
+  id         String @id @default(cuid())
+  courseId   String @unique
+  title      String
+  questions  String // JSON: [{q, options[], answer}]
+  passScore  Int    @default(60)
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  attempts AssessmentAttempt[]
+
+  @@map("assessments")
+}
+
+model AssessmentAttempt {
+  id           String   @id @default(cuid())
+  studentId    String
+  assessmentId String
+  score        Int
+  passed       Boolean
+  createdAt    DateTime @default(now())
+
+  student    Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@map("assessment_attempts")
+}
+
+model Badge {
+  id        String   @id @default(cuid())
+  skillId   String
+  level     String   @default("Bronze") // Bronze / Silver / Gold
+  label     String
+  createdAt DateTime @default(now())
+
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([skillId, level])
+  @@map("badges")
+}
+
+// ───────────────────────── Certificates ─────────────────────────
+
+enum CertificateKind {
+  PROJECT
+  SIMULATION
+  COURSE
+  INTERNSHIP
+}
+
+model Certificate {
+  id          String           @id @default(cuid())
+  studentId   String
+  kind        CertificateKind
+  title       String
+  issuer      String           @default("PS44 Portal")
+  issuedAt    DateTime         @default(now())
+  code        String           @unique
+  verified    Boolean          @default(true)
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@map("certificates")
+}
+
+// ───────────────────────── Resume screening ─────────────────────────
+
+model ResumeAnalysis {
+  id            String   @id @default(cuid())
+  studentId     String
+  fileName      String
+  atsScore      Int      @default(0)
+  strengths     String   // JSON array
+  weaknesses    String   // JSON array
+  matchedSkills String   // JSON array
+  missingSkills String   // JSON array
+  summary       String
+  createdAt     DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@map("resume_analyses")
+}
+
+// ───────────────────────── Curriculum mapping ─────────────────────────
+
+model Subject {
+  id       String @id @default(cuid())
+  name     String
+  code     String @default("")
+  program  String @default("B.Tech")
+  semester Int    @default(1)
+
+  mappings CurriculumMapping[]
+
+  @@map("subjects")
+}
+
+model CurriculumMapping {
+  id        String  @id @default(cuid())
+  subjectId String
+  skillId   String
+  coverage  Int     @default(50) // 0–100 depth of coverage
+
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  skill   Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([subjectId, skillId])
+  @@map("curriculum_mappings")
+}
